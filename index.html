@@ -789,6 +789,8 @@ let patients = JSON.parse(localStorage.getItem('cr_patients')||'null') || [
 let currentPatientId = null;
 let editMode = false;
 let editPatientId = null;
+let editConsultMode = false;
+let editConsultId = null;
 let newPMeds = [];
 let newCEsts = [];
 let newPFRs  = [];
@@ -1077,6 +1079,7 @@ function renderDetail() {
   html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:17px;font-weight:700;color:#0b1f3a">Consultas (${p.consultas.length})</div>
     <button class="btn-edit" onclick="showEditPatient()">✏️ Editar</button>
+    <button class="btn-edit" onclick="confirmDeletePatient()" style="background:#fff0f0;color:#b01c2e;border-color:#e07070">🗑️ Eliminar</button>
     <button class="btn-edit" onclick="showResumen()" style="background:#e6f4ec;color:#1a5c3a;border-color:#a8d5b5">📋 Resumen</button>
     <button class="btn-nav accent" onclick="showNewConsulta()" style="border-radius:12px;padding:8px 16px">+ Nueva</button>
   </div>`;
@@ -1093,7 +1096,7 @@ function renderDetail() {
             <div class="consult-title">${escH(c.motivoConsulta||'Consulta')}</div>
             <div class="consult-date">${escH(c.fecha)}</div>
           </div>
-          <button class="btn-ver" onclick="openModal(${c.id})">Ver</button>
+          <div style="display:flex;gap:6px"><button class="btn-ver" onclick="openModal(${c.id})">Ver</button><button class="btn-ver" style="background:#1a4fa0" onclick="showEditConsulta(${c.id})">✏️</button><button class="btn-ver" style="background:#b01c2e" onclick="confirmDeleteConsulta(${c.id})">🗑️</button></div>
         </div>
         <div class="consult-body">
           <div class="vitals-grid">
@@ -1228,7 +1231,11 @@ async function savePatient() {
 function showNewConsulta() {
   const p = patients.find(x=>x.id===currentPatientId);
   if (!p) return;
+  editConsultMode = false; editConsultId = null;
   newCEsts=[]; newCPlan=[]; newCCF=null;
+  // Reset save button text
+  const saveBtn = document.querySelector('#view-newC .btn-primary.red');
+  if (saveBtn) saveBtn.textContent = 'Guardar consulta';
   document.getElementById('c-fecha').value = new Date().toISOString().split('T')[0];
   ['c-motivo','c-ea','c-ef','c-plan','ef-fc','ef-ta','ef-sat','ef-peso','ef-alt'].forEach(id => {
     const el=document.getElementById(id); if(el) el.value='';
@@ -1282,8 +1289,9 @@ async function saveConsulta() {
   const fecha = document.getElementById('c-fecha').value;
   const motivo = document.getElementById('c-motivo').value.trim();
   if (!fecha || !motivo) return showToast('Fecha y motivo son obligatorios', true);
-  const c = {
-    id: Date.now(), fecha, motivoConsulta: motivo,
+
+  const consultData = {
+    fecha, motivoConsulta: motivo,
     estudiosRealizados: [...newCEsts],
     enfermedadActual: document.getElementById('c-ea').value.trim(),
     claseFuncional: newCCF||'',
@@ -1298,15 +1306,35 @@ async function saveConsulta() {
     planSolicitado: [...newCPlan],
     planNotas: document.getElementById('c-plan').value.trim(),
   };
-  const p = patients.find(x=>x.id===currentPatientId);
-  if (p) {
+
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+
+  if (editConsultMode && editConsultId) {
+    // EDIT CONSULT MODE — update existing consult
+    const idx = p.consultas.findIndex(x => x.id === editConsultId);
+    if (idx >= 0) {
+      p.consultas[idx] = { ...p.consultas[idx], ...consultData };
+    }
+    showToast('Guardando...');
+    await savePatientToCloud(p);
+    showToast('Consulta actualizada ✓');
+    editConsultMode = false;
+    editConsultId = null;
+    // Reset save button text
+    const saveBtn = document.querySelector('#view-newC .btn-primary.red');
+    if (saveBtn) saveBtn.textContent = 'Guardar consulta';
+  } else {
+    // CREATE CONSULT MODE — new consult
+    const c = { id: Date.now(), ...consultData };
     p.consultas.push(c);
     showToast('Guardando...');
     await savePatientToCloud(p);
-    showToast('Consulta guardada');
-    goBack('detail');
-    renderDetail();
+    showToast('Consulta guardada ✓');
   }
+
+  goBack('detail');
+  renderDetail();
 }
 
 // ── MODAL ──────────────────────────────────────────────────────────────────
@@ -1385,6 +1413,99 @@ function closeModalDirect() {
   document.body.style.overflow='';
 }
 
+
+
+// ── EDITAR CONSULTA ───────────────────────────────────────────────────────
+function showEditConsulta(consultId) {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const c = p.consultas.find(x => x.id === consultId);
+  if (!c) return;
+
+  editConsultMode = true;
+  editConsultId = consultId;
+
+  // Fill form with existing consult data
+  document.getElementById('c-fecha').value   = c.fecha || '';
+  document.getElementById('c-motivo').value  = c.motivoConsulta || '';
+  document.getElementById('c-ea').value      = c.enfermedadActual || '';
+  document.getElementById('c-ef').value      = c.examenFisico?.hallazgos || '';
+  document.getElementById('c-plan').value    = c.planNotas || '';
+  document.getElementById('ef-fc').value     = c.examenFisico?.fc || '';
+  document.getElementById('ef-ta').value     = c.examenFisico?.ta || '';
+  document.getElementById('ef-sat').value    = c.examenFisico?.saturacion || '';
+  document.getElementById('ef-peso').value   = c.examenFisico?.peso || '';
+  document.getElementById('ef-alt').value    = c.examenFisico?.altura || '';
+
+  // Update char counts
+  ['c-ea','c-ef','c-plan'].forEach(id => {
+    const el = document.getElementById(id);
+    const countId = 'count-' + id.split('-')[1];
+    const countEl = document.getElementById(countId);
+    if (el && countEl) countEl.textContent = el.value.length > 0 ? el.value.length + ' caracteres' : '';
+  });
+
+  updateIMC();
+
+  newCEsts = [...(c.estudiosRealizados || [])];
+  newCPlan = [...(c.planSolicitado || [])];
+  newCCF   = c.claseFuncional || null;
+
+  renderEstListC();
+  buildPlanGrid();
+  buildCFGrid();
+
+  // Update form header
+  document.getElementById('newc-patient-name').textContent =
+    patients.find(x=>x.id===currentPatientId)?.apellido + ' — Editando consulta ' + c.fecha;
+
+  // Change save button
+  const saveBtn = document.querySelector('#view-newC .btn-primary.red');
+  if (saveBtn) saveBtn.textContent = 'Actualizar consulta';
+
+  showView('newC');
+}
+
+// ── ELIMINAR CONSULTA ─────────────────────────────────────────────────────
+function confirmDeleteConsulta(consultId) {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const c = p.consultas.find(x => x.id === consultId);
+  if (!c) return;
+  if (confirm('¿Eliminar la consulta del ' + c.fecha + '?\n\nEsta acción no se puede deshacer.')) {
+    deleteConsulta(consultId);
+  }
+}
+
+async function deleteConsulta(consultId) {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  p.consultas = p.consultas.filter(x => x.id !== consultId);
+  showToast('Guardando...');
+  await savePatientToCloud(p);
+  showToast('Consulta eliminada');
+  renderDetail();
+}
+
+// ── ELIMINAR PACIENTE ─────────────────────────────────────────────────────
+function confirmDeletePatient() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  if (confirm('¿Eliminar al paciente ' + p.apellido + ', ' + p.nombre + '?\n\nSe eliminarán TODAS sus consultas.\nEsta acción no se puede deshacer.')) {
+    deletePatient();
+  }
+}
+
+async function deletePatient() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  showToast('Eliminando...');
+  if (p._supa_id) await deletePatientFromCloud(p._supa_id);
+  patients = patients.filter(x => x.id !== currentPatientId);
+  currentPatientId = null;
+  showToast('Paciente eliminado');
+  goBack('list');
+}
 
 // ── RESUMEN CLÍNICO ───────────────────────────────────────────────────────
 function showResumen() {
