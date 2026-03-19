@@ -1,0 +1,11 @@
+name: Deploy
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: curl -L "https://raw.githubusercontent.com/9j5zq4k6x2-collab/Cardiorecord/main/index.html" -o index.html
+      - run: git config user.email "bot@github.com" && git config user.name "bot"
+      - run: git add . && git commit -m "update" && git push
