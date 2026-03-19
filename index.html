@@ -628,6 +628,60 @@ padding:18px 18px 20px;
 <div class="toast hidden" id="toast"></div>
 
 <script>
+
+// ── Supabase Config ─────────────────────────────────────────────────────────
+const SUPA_URL = 'https://gcsspamgnnqegareyvfy.supabase.co';
+const SUPA_KEY = 'sb_publishable_F1RvlEvP3XeiDA1hIk9rWA_LiGGTrna';
+
+async function supaFetch(path, method='GET', body=null) {
+  const opts = {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=representation'
+    }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(SUPA_URL + path, opts);
+  if (!r.ok) { const t = await r.text(); throw new Error(t); }
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : [];
+}
+
+async function loadPatients() {
+  try {
+    const rows = await supaFetch('/rest/v1/pacientes?select=*&order=created_at.asc');
+    patients = rows.map(r => ({ ...r.datos, _supa_id: r.id }));
+  } catch(e) {
+    console.error('Error cargando:', e);
+    patients = JSON.parse(localStorage.getItem('cr_patients')||'[]');
+  }
+}
+
+async function savePatientToCloud(p) {
+  try {
+    if (p._supa_id) {
+      const { _supa_id, ...datos } = p;
+      await supaFetch('/rest/v1/pacientes?id=eq.' + _supa_id, 'PATCH', { datos });
+    } else {
+      const res = await supaFetch('/rest/v1/pacientes', 'POST', { medico_id: 'dr_perez', datos: p });
+      if (res && res[0]) p._supa_id = res[0].id;
+    }
+    localStorage.setItem('cr_patients', JSON.stringify(patients));
+  } catch(e) {
+    console.error('Error guardando:', e);
+    localStorage.setItem('cr_patients', JSON.stringify(patients));
+  }
+}
+
+async function deletePatientFromCloud(supaId) {
+  try {
+    await supaFetch('/rest/v1/pacientes?id=eq.' + supaId, 'DELETE');
+  } catch(e) { console.error('Error borrando:', e); }
+}
+
 // ── Constantes ─────────────────────────────────────────────────────────────
 const FACTORES_RIESGO = [
   "HTA","Dislipidemia","Diabetes","Tabaquismo",
@@ -688,7 +742,12 @@ function showView(v) {
   document.getElementById('scroll-area').scrollTop = 0;
 }
 function goBack(v) {
-  if (v === 'list') { showView('list'); renderList(); }
+  if (v === 'list') { showView('list'); // Load from cloud on start
+(async () => {
+  showToast('Sincronizando...');
+  await loadPatients();
+  renderList();
+})(); }
   if (v === 'detail') { showView('detail'); renderDetail(); }
 }
 
@@ -966,7 +1025,7 @@ function renderMedListP() {
 }
 function remMedP(i) { newPMeds.splice(i,1); renderMedListP(); }
 
-function savePatient() {
+async function savePatient() {
   const apellido = document.getElementById('p-apellido').value.trim();
   const dni      = document.getElementById('p-dni').value.trim();
   if (!apellido || !dni) return showToast('Apellido y DNI son obligatorios', true);
@@ -987,9 +1046,17 @@ function savePatient() {
     medicacionHabitual: [...newPMeds],
     consultas: [],
   };
-  patients.push(p); save();
+  patients.push(p);
+  showToast('Guardando...');
+  await savePatientToCloud(p);
   showToast('Paciente registrado');
   goBack('list');
+  // Load from cloud on start
+(async () => {
+  showToast('Sincronizando...');
+  await loadPatients();
+  renderList();
+})();
 }
 
 // ── NUEVA CONSULTA ─────────────────────────────────────────────────────────
@@ -1046,7 +1113,7 @@ function renderEstListC() {
 }
 function remEstC(i) { newCEsts.splice(i,1); renderEstListC(); }
 
-function saveConsulta() {
+async function saveConsulta() {
   const fecha = document.getElementById('c-fecha').value;
   const motivo = document.getElementById('c-motivo').value.trim();
   if (!fecha || !motivo) return showToast('Fecha y motivo son obligatorios', true);
@@ -1067,9 +1134,14 @@ function saveConsulta() {
     planNotas: document.getElementById('c-plan').value.trim(),
   };
   const p = patients.find(x=>x.id===currentPatientId);
-  if (p) { p.consultas.push(c); save(); }
-  showToast('Consulta guardada');
-  goBack('detail');
+  if (p) {
+    p.consultas.push(c);
+    showToast('Guardando...');
+    await savePatientToCloud(p);
+    showToast('Consulta guardada');
+    goBack('detail');
+    renderDetail();
+  }
 }
 
 // ── MODAL ──────────────────────────────────────────────────────────────────
@@ -1149,7 +1221,12 @@ function closeModalDirect() {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
-renderList();
+// Load from cloud on start
+(async () => {
+  showToast('Sincronizando...');
+  await loadPatients();
+  renderList();
+})();
 </script>
 
 </body>
