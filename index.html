@@ -401,6 +401,34 @@ padding:18px 18px 20px;
 .consult-form-hdr h2 { color:#fff; font-size:19px; font-weight:700; }
 .consult-form-hdr p  { color:rgba(255,255,255,.65); font-size:13px; margin-top:3px; }
 
+/* Autocomplete */
+.autocomplete-wrap { position:relative; }
+.autocomplete-list {
+position:absolute; top:100%; left:0; right:0; z-index:999;
+background:#fff; border:1.5px solid #d0d8e4; border-radius:12px;
+max-height:200px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.15);
+margin-top:4px;
+}
+.autocomplete-item {
+padding:12px 14px; font-size:14px; cursor:pointer;
+border-bottom:1px solid #f0f0f0; color:#1a2535;
+}
+.autocomplete-item:last-child { border-bottom:none; }
+.autocomplete-item:active { background:#f0f6ff; }
+
+/* Edit mode */
+.btn-edit {
+background:#e8f0fc; color:#1a4fa0; border:1px solid #c5d8ea;
+border-radius:8px; padding:7px 14px; font-size:12px;
+font-weight:600; cursor:pointer; flex-shrink:0;
+}
+.edit-banner {
+background:linear-gradient(135deg,#1a4fa0,#163354);
+padding:16px 18px; color:#fff;
+}
+.edit-banner h3 { font-size:17px; font-weight:700; margin-bottom:2px; }
+.edit-banner p  { font-size:12px; opacity:.7; }
+
 /* ── HIDDEN ── */
 .hidden { display:none !important; }
 
@@ -467,7 +495,14 @@ padding:18px 18px 20px;
         <div class="field-row"><div class="field"><label>Apellido *</label><input id="p-apellido" type="text" autocomplete="off"/></div><div class="field"><label>Nombre *</label><input id="p-nombre" type="text" autocomplete="off"/></div></div>
         <div class="field-row"><div class="field"><label>F. Nacimiento</label><input id="p-fn" type="date"/></div><div class="field"><label>Sexo</label><select id="p-sexo"><option value="">—</option><option>Masculino</option><option>Femenino</option><option>Otro</option></select></div></div>
         <div class="field-row"><div class="field"><label>DNI *</label><input id="p-dni" type="text" inputmode="numeric"/></div><div class="field"><label>Grupo sanguíneo</label><select id="p-gs"><option value="">—</option><option>A+</option><option>A-</option><option>B+</option><option>B-</option><option>AB+</option><option>AB-</option><option>O+</option><option>O-</option></select></div></div>
-        <div class="field-row"><div class="field"><label>Obra Social</label><input id="p-os" type="text" autocomplete="off"/></div><div class="field"><label>N° Afiliado</label><input id="p-afil" type="text" inputmode="numeric"/></div></div>
+        <div class="field-row"><div class="field autocomplete-wrap">
+          <label>Obra Social</label>
+          <input id="p-os" type="text" autocomplete="off" 
+            oninput="filterOS('p-os','p-os-list')" 
+            onblur="setTimeout(()=>hideOS('p-os-list'),200)"
+            placeholder="Escribi para buscar..."/>
+          <div class="autocomplete-list hidden" id="p-os-list"></div>
+        </div><div class="field"><label>N° Afiliado</label><input id="p-afil" type="text" inputmode="numeric"/></div></div>
         <div class="field"><label>Teléfono</label><input id="p-tel" type="tel"/></div>
       </div>
 
@@ -683,6 +718,32 @@ async function deletePatientFromCloud(supaId) {
 }
 
 // ── Constantes ─────────────────────────────────────────────────────────────
+const OBRAS_SOCIALES = [
+  "OSDE","Swiss Medical","Galeno","Medifé","OMINT","Accord Salud",
+  "IOMA","PAMI","OSECAC","OSUTHGRA","OSTEL","OSTEP","OSPECON","OSPIA",
+  "OSPAT","OSPOCE","OSPACA","OSPLAD","OSPEDYC","OSPRERA","OSPM","OSPJN",
+  "OSDOP","Medicus","Sancor Salud","Jerárquicos Salud","Unión Personal",
+  "Federada Salud","DAMSU","DOSUBA","DOSEP","DOSS","IOSFA","IPREAP",
+  "IPROSS","IPSAS","IPSE","ISEM","OSAM","OSBA","OSCEP","OSDIPP",
+  "OSEN","OSFA","OSIMA","OSIPA","OSIPE","OSIS","OSLO","OSMA","OSME",
+  "OSMI","OSML","OSMO","OSMP","OSNA","OSNE","OSNI","OSNO","OSNP",
+  "OSPACA","OSPASA","OSPAT","OSPATUR","OSPATCA","OSPE","OSPECA",
+  "OSPECO","OSPEDYC","OSPEF","OSPEIM","OSPEMI","OSPEN","OSPER",
+  "OSPERA","OSPERE","OSPERI","OSPERO","OSPERU","OSPESA","OSPESE",
+  "OSPESI","OSPESO","OSPESU","OSPETA","OSPETE","OSPETI","OSPETO",
+  "OSPETU","OSPEVA","OSPEVE","OSPEVI","OSPEVO","OSPEVU","ACA Salud",
+  "ACSA","ADEMA","AMFASEP","AMSAFE","APM","APSA","ASSISTENZA",
+  "ASSURED","ATLAS","AVALIAN","Ecomedical","Emermedical","Ensalud",
+  "Esencial","FABA","FAECYS","FATA","FATSA","Federación Médica",
+  "Fonasa","Galicia Salud","Garantizar","Global Med","Gran Médica",
+  "Grupo Atlas","Grupo Nueva","Hemisferio","Hersa","Hipermed",
+  "Horizonte","Hospital Alemán","Hospital Británico","Hospital Español",
+  "Hospital Italiano","Hospital Privado","Humanitas","IMED","IMEDIAL",
+  "IMOS","Integral","Integros","Interbaires","Intermedical","Interplan",
+  "Intersalud","ISAL","IOSFA","OSECAC","OSUTHGRA","OSTEL","OSIM",
+  "OSMEP","OSMAP","OSME","Particular","Sin obra social","Prepaga particular"
+];
+
 const FACTORES_RIESGO = [
   "HTA","Dislipidemia","Diabetes","Tabaquismo",
   "Sedentarismo","Edad > 65 años","Obesidad","Ant. familiar EC"
@@ -726,6 +787,8 @@ let patients = JSON.parse(localStorage.getItem('cr_patients')||'null') || [
   }
 ];
 let currentPatientId = null;
+let editMode = false;
+let editPatientId = null;
 let newPMeds = [];
 let newCEsts = [];
 let newPFRs  = [];
@@ -847,6 +910,63 @@ function buildCFGrid() {
   });
 }
 
+// ── Autocomplete ──────────────────────────────────────────────────────────
+function filterOS(inputId, listId) {
+  const q = document.getElementById(inputId).value.toLowerCase().trim();
+  const list = document.getElementById(listId);
+  if (!q) { list.classList.add('hidden'); return; }
+  const matches = OBRAS_SOCIALES.filter(o => o.toLowerCase().includes(q)).slice(0,8);
+  if (!matches.length) { list.classList.add('hidden'); return; }
+  list.innerHTML = matches.map(o =>
+    `<div class="autocomplete-item" onmousedown="selectOS('${inputId}','${listId}','${o.replace(/'/g,"\'")}')">${o}</div>`
+  ).join('');
+  list.classList.remove('hidden');
+}
+function selectOS(inputId, listId, val) {
+  document.getElementById(inputId).value = val;
+  document.getElementById(listId).classList.add('hidden');
+}
+function hideOS(listId) {
+  const el = document.getElementById(listId);
+  if (el) el.classList.add('hidden');
+}
+
+// ── EDITAR PACIENTE ───────────────────────────────────────────────────────
+function showEditPatient() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  editMode = true;
+  editPatientId = currentPatientId;
+
+  // Fill form with existing data
+  document.getElementById('p-apellido').value = p.apellido || '';
+  document.getElementById('p-nombre').value   = p.nombre || '';
+  document.getElementById('p-fn').value       = p.fechaNacimiento || '';
+  document.getElementById('p-sexo').value     = p.sexo || '';
+  document.getElementById('p-dni').value      = p.dni || '';
+  document.getElementById('p-gs').value       = p.grupoSanguineo || '';
+  document.getElementById('p-os').value       = p.obraSocial || '';
+  document.getElementById('p-afil').value     = p.numAfiliado || '';
+  document.getElementById('p-tel').value      = p.telefono || '';
+  document.getElementById('p-antcv').value    = p.antCV || '';
+  document.getElementById('p-antfam').value   = p.antFamiliares || '';
+  document.getElementById('p-antot').value    = p.antOtros || '';
+
+  newPFRs = [...(p.factoresRiesgo || [])];
+  newPMeds = [...(p.medicacionHabitual || [])];
+
+  buildFRGrid('fr-grid-p', newPFRs, toggleFR);
+  renderMedListP();
+
+  // Change form header to edit mode
+  const headerDiv = document.querySelector('#view-newP .card > div:first-child');
+  if (headerDiv) {
+    headerDiv.innerHTML = '<div style="color:#fff;font-size:19px;font-weight:700">Editar paciente</div><div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px">Modificar datos del paciente</div>';
+  }
+
+  showView('newP');
+}
+
 // ── LISTA ─────────────────────────────────────────────────────────────────
 function renderList() {
   const q = (document.getElementById('search-input').value||'').toLowerCase();
@@ -956,6 +1076,8 @@ function renderDetail() {
   // Historial consultas
   html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:17px;font-weight:700;color:#0b1f3a">Consultas (${p.consultas.length})</div>
+    <button class="btn-edit" onclick="showEditPatient()">✏️ Editar</button>
+    <button class="btn-edit" onclick="showResumen()" style="background:#e6f4ec;color:#1a5c3a;border-color:#a8d5b5">📋 Resumen</button>
     <button class="btn-nav accent" onclick="showNewConsulta()" style="border-radius:12px;padding:8px 16px">+ Nueva</button>
   </div>`;
 
@@ -1220,6 +1342,201 @@ function closeModalDirect() {
   document.body.style.overflow='';
 }
 
+
+// ── RESUMEN CLÍNICO ───────────────────────────────────────────────────────
+function showResumen() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+
+  const e = calcEdad(p.fechaNacimiento);
+  const ult = p.consultas.length ? p.consultas[p.consultas.length-1] : null;
+  const today = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+
+  document.getElementById('resumen-paciente-name').textContent = `${p.apellido}, ${p.nombre} — ${today}`;
+
+  // Build last vitals from most recent consult
+  const vi = ult ? calcIMC(ult.examenFisico?.peso, ult.examenFisico?.altura) : null;
+
+  let html = '';
+
+  // ── Header ──
+  html += `<div style="background:#f0faf4;border-radius:12px;padding:14px 16px;margin-bottom:16px;border:1px solid #a8d5b5">
+    <div style="font-size:13px;color:#1a5c3a;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Identificación</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;color:#1a2535">
+      <div><strong>Apellido y nombre:</strong> ${escH(p.apellido)}, ${escH(p.nombre)}</div>
+      <div><strong>Edad:</strong> ${e ? e + ' años' : '—'}</div>
+      <div><strong>DNI:</strong> ${escH(p.dni||'—')}</div>
+      <div><strong>Obra Social:</strong> ${escH(p.obraSocial||'—')} ${p.numAfiliado?'(N° '+escH(p.numAfiliado)+')':''}</div>
+      ${p.grupoSanguineo?`<div><strong>Grupo sanguíneo:</strong> ${escH(p.grupoSanguineo)}</div>`:''}
+      ${p.telefono?`<div><strong>Teléfono:</strong> ${escH(p.telefono)}</div>`:''}
+    </div>
+  </div>`;
+
+  // ── Factores de riesgo ──
+  if ((p.factoresRiesgo||[]).length > 0) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#b01c2e;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #ffd0d0">⚠️ Factores de riesgo cardiovascular</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${p.factoresRiesgo.map(f=>`<span style="background:#fff0f0;color:#8b1520;padding:4px 12px;border-radius:20px;font-size:13px">${escH(f)}</span>`).join('')}</div>
+    </div>`;
+  }
+
+  // ── Antecedentes ──
+  if (p.antCV || p.antFamiliares || p.antOtros) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#163354;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #c5d8ea">🏥 Antecedentes</div>`;
+    if (p.antCV) html += `<div style="margin-bottom:8px;font-size:13px"><strong>Cardiovasculares:</strong> <span style="color:#1a2535">${escH(p.antCV)}</span></div>`;
+    if (p.antFamiliares) html += `<div style="margin-bottom:8px;font-size:13px"><strong>Familiares:</strong> <span style="color:#1a2535">${escH(p.antFamiliares)}</span></div>`;
+    if (p.antOtros) html += `<div style="margin-bottom:8px;font-size:13px"><strong>Otros:</strong> <span style="color:#1a2535">${escH(p.antOtros)}</span></div>`;
+    html += `</div>`;
+  }
+
+  // ── Medicación habitual ──
+  if ((p.medicacionHabitual||[]).length > 0) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#1a5c3a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #a8d5b5">💊 Medicación habitual</div>
+      ${p.medicacionHabitual.map(m=>`<div style="background:#e6f4ec;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px">
+        <strong>${escH(m.nombre)}</strong> ${escH(m.dosis)} — ${escH(m.frecuencia)}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // ── Estudios realizados (de todas las consultas) ──
+  const todosEstudios = p.consultas.flatMap(c => (c.estudiosRealizados||[]).map(e => ({...e, fechaConsulta: c.fecha})));
+  if (todosEstudios.length > 0) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#1a4fa0;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #c5d8ea">📄 Estudios realizados</div>
+      ${todosEstudios.map(e=>`<div style="background:#e8f0fc;border-radius:8px;padding:8px 12px;margin-bottom:6px;font-size:13px">
+        <strong>${escH(e.tipo)}</strong>${e.fecha?' — '+escH(e.fecha):''}
+        ${e.resultado?`<div style="color:#5a7a9a;margin-top:3px;font-size:12px">${escH(e.resultado)}</div>`:''}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // ── Estado actual (última consulta) ──
+  if (ult) {
+    html += `<div style="margin-bottom:14px">
+      <div style="font-size:13px;font-weight:700;color:#0b1f3a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-bottom:6px;border-bottom:1.5px solid #d0d8e4">🩺 Estado actual — Última consulta (${escH(ult.fecha)})</div>`;
+
+    // Vitals
+    html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">TA</div><div style="font-size:14px;font-weight:700;color:#0b1f3a">${escH(ult.examenFisico?.ta||'—')}</div></div>
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">FC</div><div style="font-size:14px;font-weight:700;color:#0b1f3a">${ult.examenFisico?.fc?ult.examenFisico.fc+' lpm':'—'}</div></div>
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">Sat O₂</div><div style="font-size:14px;font-weight:700;color:#0b1f3a">${ult.examenFisico?.saturacion?ult.examenFisico.saturacion+'%':'—'}</div></div>
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">Peso</div><div style="font-size:14px;font-weight:700;color:#0b1f3a">${ult.examenFisico?.peso?ult.examenFisico.peso+' kg':'—'}</div></div>
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">IMC</div><div style="font-size:14px;font-weight:700;color:${imcColor(vi)}">${vi||'—'}</div></div>
+      <div style="background:#f2ede6;border-radius:10px;padding:9px 12px;text-align:center"><div style="font-size:10px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">Clase func.</div><div style="font-size:12px;font-weight:700;color:#0b1f3a">${escH(ult.claseFuncional||'—')}</div></div>
+    </div>`;
+
+    if (ult.motivoConsulta) html += `<div style="font-size:13px;margin-bottom:8px"><strong>Motivo:</strong> ${escH(ult.motivoConsulta)}</div>`;
+    if (ult.enfermedadActual) html += `<div style="background:#f5f9ff;border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:8px;line-height:1.6"><strong>Enfermedad actual:</strong><br>${escH(ult.enfermedadActual)}</div>`;
+    if (ult.examenFisico?.hallazgos) html += `<div style="background:#f5f9ff;border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:8px;line-height:1.6"><strong>Examen físico:</strong><br>${escH(ult.examenFisico.hallazgos)}</div>`;
+
+    if ((ult.planSolicitado||[]).length > 0 || ult.planNotas) {
+      html += `<div style="margin-top:10px"><strong style="font-size:13px">Plan:</strong><br>`;
+      if ((ult.planSolicitado||[]).length > 0) {
+        html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin:6px 0">${ult.planSolicitado.map(x=>`<span style="background:#e8f0fc;color:#1a4fa0;padding:3px 10px;border-radius:20px;font-size:12px">${escH(x)}</span>`).join('')}</div>`;
+      }
+      if (ult.planNotas) html += `<div style="background:#e6f4ec;border-radius:8px;padding:10px 13px;font-size:13px;line-height:1.6;margin-top:6px">${escH(ult.planNotas)}</div>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── Footer ──
+  html += `<div style="margin-top:20px;padding-top:14px;border-top:1px solid #d0d8e4;font-size:11px;color:#6b7e96;text-align:center">
+    CardioRecord · Dr. Pérez · Generado el ${today}
+  </div>`;
+
+  document.getElementById('resumen-body').innerHTML = html;
+  document.getElementById('resumen-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeResumen(e) {
+  if (e.target === document.getElementById('resumen-overlay')) closeResumenDirect();
+}
+function closeResumenDirect() {
+  document.getElementById('resumen-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function copyResumen() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const e = calcEdad(p.fechaNacimiento);
+  const today = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  const ult = p.consultas.length ? p.consultas[p.consultas.length-1] : null;
+
+  let text = '';
+  text += '╔══════════════════════════════════════╗\n';
+  text += '║        RESUMEN CLÍNICO               ║\n';
+  text += '╚══════════════════════════════════════╝\n\n';
+  text += `Paciente: ${p.apellido}, ${p.nombre}\n`;
+  text += `Edad: ${e ? e + ' años' : '—'}  |  DNI: ${p.dni||'—'}\n`;
+  text += `Obra Social: ${p.obraSocial||'—'}${p.numAfiliado?' (N° '+p.numAfiliado+')':''}\n`;
+  if (p.grupoSanguineo) text += `Grupo sanguíneo: ${p.grupoSanguineo}\n`;
+  text += `Fecha: ${today}\n\n`;
+
+  if ((p.factoresRiesgo||[]).length > 0) {
+    text += '⚠️ FACTORES DE RIESGO CV\n';
+    text += p.factoresRiesgo.join(' · ') + '\n\n';
+  }
+
+  if (p.antCV || p.antFamiliares || p.antOtros) {
+    text += '🏥 ANTECEDENTES\n';
+    if (p.antCV) text += `Cardiovasculares: ${p.antCV}\n`;
+    if (p.antFamiliares) text += `Familiares: ${p.antFamiliares}\n`;
+    if (p.antOtros) text += `Otros: ${p.antOtros}\n`;
+    text += '\n';
+  }
+
+  if ((p.medicacionHabitual||[]).length > 0) {
+    text += '💊 MEDICACIÓN HABITUAL\n';
+    p.medicacionHabitual.forEach(m => { text += `• ${m.nombre} ${m.dosis} — ${m.frecuencia}\n`; });
+    text += '\n';
+  }
+
+  const todosEstudios = p.consultas.flatMap(c => (c.estudiosRealizados||[]).map(e => ({...e})));
+  if (todosEstudios.length > 0) {
+    text += '📄 ESTUDIOS REALIZADOS\n';
+    todosEstudios.forEach(e => {
+      text += `• ${e.tipo}${e.fecha?' ('+e.fecha+')':''}`;
+      if (e.resultado) text += `: ${e.resultado}`;
+      text += '\n';
+    });
+    text += '\n';
+  }
+
+  if (ult) {
+    text += `🩺 ESTADO ACTUAL (${ult.fecha})\n`;
+    if (ult.examenFisico?.ta) text += `TA: ${ult.examenFisico.ta} mmHg  |  FC: ${ult.examenFisico.fc||'—'} lpm  |  Sat O₂: ${ult.examenFisico.saturacion||'—'}%\n`;
+    if (ult.examenFisico?.peso) text += `Peso: ${ult.examenFisico.peso} kg  |  IMC: ${calcIMC(ult.examenFisico.peso, ult.examenFisico.altura)||'—'}\n`;
+    if (ult.claseFuncional) text += `Clase funcional: ${ult.claseFuncional}\n`;
+    if (ult.motivoConsulta) text += `\nMotivo: ${ult.motivoConsulta}\n`;
+    if (ult.enfermedadActual) text += `\nEnfermedad actual:\n${ult.enfermedadActual}\n`;
+    if (ult.examenFisico?.hallazgos) text += `\nExamen físico:\n${ult.examenFisico.hallazgos}\n`;
+    if ((ult.planSolicitado||[]).length > 0) text += `\nPlan: ${ult.planSolicitado.join(', ')}\n`;
+    if (ult.planNotas) text += `\nIndicaciones:\n${ult.planNotas}\n`;
+  }
+
+  text += '\n─────────────────────────────────────\n';
+  text += `CardioRecord · Dr. Pérez · ${today}\n`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Resumen copiado al portapapeles ✓');
+  }).catch(() => {
+    // Fallback for iOS
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Resumen copiado ✓');
+  });
+}
+
 // ── INIT ───────────────────────────────────────────────────────────────────
 // Load from cloud on start
 (async () => {
@@ -1228,6 +1545,25 @@ function closeModalDirect() {
   renderList();
 })();
 </script>
+
+<!-- MODAL RESUMEN CLÍNICO -->
+
+<div class="modal-overlay hidden" id="resumen-overlay" onclick="closeResumen(event)">
+  <div class="modal-sheet" id="resumen-sheet" style="max-height:95vh">
+    <div class="modal-handle"></div>
+    <div style="background:linear-gradient(135deg,#1a5c3a,#0d3d24);padding:16px 20px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:#fff;font-size:16px;font-weight:700">📋 Resumen Clínico</div>
+        <div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:2px" id="resumen-paciente-name"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="copyResumen()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">📋 Copiar</button>
+        <button onclick="closeResumenDirect()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+    </div>
+    <div style="padding:20px 18px 30px" id="resumen-body"></div>
+  </div>
+</div>
 
 </body>
 </html>
