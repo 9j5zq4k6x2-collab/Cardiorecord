@@ -805,12 +805,8 @@ function showView(v) {
   document.getElementById('scroll-area').scrollTop = 0;
 }
 function goBack(v) {
-  if (v === 'list') { showView('list'); // Load from cloud on start
-(async () => {
-  showToast('Sincronizando...');
-  await loadPatients();
-  renderList();
-})(); }
+  editMode = false; editPatientId = null;
+  if (v === 'list') { showView('list'); renderList(); }
   if (v === 'detail') { showView('detail'); renderDetail(); }
 }
 
@@ -958,11 +954,15 @@ function showEditPatient() {
   buildFRGrid('fr-grid-p', newPFRs, toggleFR);
   renderMedListP();
 
-  // Change form header to edit mode
+  // Change form header and button to edit mode
   const headerDiv = document.querySelector('#view-newP .card > div:first-child');
   if (headerDiv) {
-    headerDiv.innerHTML = '<div style="color:#fff;font-size:19px;font-weight:700">Editar paciente</div><div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px">Modificar datos del paciente</div>';
+    headerDiv.innerHTML = '<div style="color:#fff;font-size:19px;font-weight:700">✏️ Editar paciente</div><div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px">Modificar datos del paciente</div>';
+    headerDiv.style.background = 'linear-gradient(135deg,#1a4fa0,#163354)';
   }
+  // Change save button text
+  const saveBtn = document.querySelector('#view-newP .btn-primary');
+  if (saveBtn) saveBtn.textContent = 'Actualizar paciente';
 
   showView('newP');
 }
@@ -1113,7 +1113,16 @@ function renderDetail() {
 
 // ── NUEVO PACIENTE ─────────────────────────────────────────────────────────
 function showNewPatient() {
+  editMode = false; editPatientId = null;
   newPMeds = []; newPFRs = [];
+  // Reset header to new patient mode
+  const headerDiv = document.querySelector('#view-newP .card > div:first-child');
+  if (headerDiv) {
+    headerDiv.innerHTML = '<div style="color:#fff;font-size:19px;font-weight:700">Nuevo paciente</div><div style="color:rgba(255,255,255,.55);font-size:13px;margin-top:3px">Historia clínica cardiológica</div>';
+    headerDiv.style.background = 'linear-gradient(135deg,var(--navy, #0b1f3a),#163354)';
+  }
+  const saveBtn = document.querySelector('#view-newP .btn-primary');
+  if (saveBtn) saveBtn.textContent = 'Guardar paciente';
   ['p-apellido','p-nombre','p-fn','p-dni','p-os','p-afil','p-tel','p-antcv','p-antfam','p-antot']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   ['p-sexo','p-gs'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
@@ -1151,9 +1160,46 @@ async function savePatient() {
   const apellido = document.getElementById('p-apellido').value.trim();
   const dni      = document.getElementById('p-dni').value.trim();
   if (!apellido || !dni) return showToast('Apellido y DNI son obligatorios', true);
+
+  if (editMode && editPatientId) {
+    // EDIT MODE — update existing patient
+    const idx = patients.findIndex(x => x.id === editPatientId);
+    if (idx >= 0) {
+      const existing = patients[idx];
+      patients[idx] = {
+        ...existing,
+        apellido,
+        nombre: document.getElementById('p-nombre').value.trim(),
+        fechaNacimiento: document.getElementById('p-fn').value,
+        sexo: document.getElementById('p-sexo').value,
+        dni,
+        grupoSanguineo: document.getElementById('p-gs').value,
+        obraSocial: document.getElementById('p-os').value.trim(),
+        numAfiliado: document.getElementById('p-afil').value.trim(),
+        telefono: document.getElementById('p-tel').value.trim(),
+        factoresRiesgo: [...newPFRs],
+        antCV: document.getElementById('p-antcv').value.trim(),
+        antFamiliares: document.getElementById('p-antfam').value.trim(),
+        antOtros: document.getElementById('p-antot').value.trim(),
+        medicacionHabitual: [...newPMeds],
+      };
+      showToast('Guardando...');
+      await savePatientToCloud(patients[idx]);
+      showToast('Paciente actualizado ✓');
+      currentPatientId = editPatientId;
+      editMode = false;
+      editPatientId = null;
+      showView('detail');
+      renderDetail();
+    }
+    return;
+  }
+
+  // CREATE MODE — new patient
   const p = {
     id: Date.now(),
-    apellido, nombre: document.getElementById('p-nombre').value.trim(),
+    apellido,
+    nombre: document.getElementById('p-nombre').value.trim(),
     fechaNacimiento: document.getElementById('p-fn').value,
     sexo: document.getElementById('p-sexo').value,
     dni,
@@ -1171,14 +1217,11 @@ async function savePatient() {
   patients.push(p);
   showToast('Guardando...');
   await savePatientToCloud(p);
-  showToast('Paciente registrado');
+  showToast('Paciente registrado ✓');
+  editMode = false;
+  editPatientId = null;
   goBack('list');
-  // Load from cloud on start
-(async () => {
-  showToast('Sincronizando...');
-  await loadPatients();
   renderList();
-})();
 }
 
 // ── NUEVA CONSULTA ─────────────────────────────────────────────────────────
