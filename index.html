@@ -429,6 +429,14 @@ padding:16px 18px; color:#fff;
 .edit-banner h3 { font-size:17px; font-weight:700; margin-bottom:2px; }
 .edit-banner p  { font-size:12px; opacity:.7; }
 
+@media print {
+.modal-overlay { position:static !important; background:none !important; display:block !important; }
+.modal-sheet { box-shadow:none !important; max-height:none !important; border-radius:0 !important; }
+.modal-hdr button, .modal-handle { display:none !important; }
+#app, .navbar, .status-bar, .tabbar { display:none !important; }
+body { overflow:visible !important; }
+}
+
 /* ── HIDDEN ── */
 .hidden { display:none !important; }
 
@@ -452,7 +460,7 @@ padding:16px 18px; color:#fff;
       </div>
     </div>
     <div id="nav-actions">
-      <button class="btn-nav accent" onclick="showNewPatient()">+ Paciente</button>
+      <button class="btn-nav" onclick="showHojaDia()" style="background:rgba(255,255,255,.12);margin-right:6px">📋 Hoja del día</button><button class="btn-nav accent" onclick="showNewPatient()">+ Paciente</button>
     </div>
   </nav>
 
@@ -1624,12 +1632,15 @@ function closeResumenDirect() {
   document.body.style.overflow = '';
 }
 
-function copyResumen() {
+
+// ── COMPARTIR RESUMEN ─────────────────────────────────────────────────────
+function getResumenText() {
   const p = patients.find(x => x.id === currentPatientId);
-  if (!p) return;
+  if (!p) return '';
   const e = calcEdad(p.fechaNacimiento);
   const today = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
   const ult = p.consultas.length ? p.consultas[p.consultas.length-1] : null;
+  const vi = ult ? calcIMC(ult.examenFisico?.peso, ult.examenFisico?.altura) : null;
 
   let text = '';
   text += '╔══════════════════════════════════════╗\n';
@@ -1645,7 +1656,6 @@ function copyResumen() {
     text += '⚠️ FACTORES DE RIESGO CV\n';
     text += p.factoresRiesgo.join(' · ') + '\n\n';
   }
-
   if (p.antCV || p.antFamiliares || p.antOtros) {
     text += '🏥 ANTECEDENTES\n';
     if (p.antCV) text += `Cardiovasculares: ${p.antCV}\n`;
@@ -1653,13 +1663,11 @@ function copyResumen() {
     if (p.antOtros) text += `Otros: ${p.antOtros}\n`;
     text += '\n';
   }
-
   if ((p.medicacionHabitual||[]).length > 0) {
     text += '💊 MEDICACIÓN HABITUAL\n';
     p.medicacionHabitual.forEach(m => { text += `• ${m.nombre} ${m.dosis} — ${m.frecuencia}\n`; });
     text += '\n';
   }
-
   const todosEstudios = p.consultas.flatMap(c => (c.estudiosRealizados||[]).map(e => ({...e})));
   if (todosEstudios.length > 0) {
     text += '📄 ESTUDIOS REALIZADOS\n';
@@ -1670,11 +1678,10 @@ function copyResumen() {
     });
     text += '\n';
   }
-
   if (ult) {
     text += `🩺 ESTADO ACTUAL (${ult.fecha})\n`;
     if (ult.examenFisico?.ta) text += `TA: ${ult.examenFisico.ta} mmHg  |  FC: ${ult.examenFisico.fc||'—'} lpm  |  Sat O₂: ${ult.examenFisico.saturacion||'—'}%\n`;
-    if (ult.examenFisico?.peso) text += `Peso: ${ult.examenFisico.peso} kg  |  IMC: ${calcIMC(ult.examenFisico.peso, ult.examenFisico.altura)||'—'}\n`;
+    if (ult.examenFisico?.peso) text += `Peso: ${ult.examenFisico.peso} kg  |  IMC: ${vi||'—'}\n`;
     if (ult.claseFuncional) text += `Clase funcional: ${ult.claseFuncional}\n`;
     if (ult.motivoConsulta) text += `\nMotivo: ${ult.motivoConsulta}\n`;
     if (ult.enfermedadActual) text += `\nEnfermedad actual:\n${ult.enfermedadActual}\n`;
@@ -1682,31 +1689,333 @@ function copyResumen() {
     if ((ult.planSolicitado||[]).length > 0) text += `\nPlan: ${ult.planSolicitado.join(', ')}\n`;
     if (ult.planNotas) text += `\nIndicaciones:\n${ult.planNotas}\n`;
   }
-
   text += '\n─────────────────────────────────────\n';
   text += `CardioRecord · Dr. Pérez · ${today}\n`;
+  return text;
+}
 
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Resumen copiado al portapapeles ✓');
-  }).catch(() => {
-    // Fallback for iOS
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus(); ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast('Resumen copiado ✓');
-  });
+async function shareResumen() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const text = getResumenText();
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: `Resumen Clínico — ${p.apellido}, ${p.nombre}`,
+        text: text
+      });
+    } catch(e) { if (e.name !== 'AbortError') copyResumen(); }
+  } else {
+    copyResumen();
+    showToast('Texto copiado — pegalo donde quieras compartir');
+  }
+}
+
+function shareWhatsApp() {
+  const text = getResumenText();
+  const encoded = encodeURIComponent(text);
+  window.open('https://wa.me/?text=' + encoded, '_blank');
+}
+
+function shareEmail() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const text = getResumenText();
+  const subject = encodeURIComponent(`Resumen Clínico — ${p.apellido}, ${p.nombre}`);
+  const body = encodeURIComponent(text);
+  window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+}
+
+function printResumen() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  const body = document.getElementById('resumen-body').innerHTML;
+  const today = new Date().toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Resumen Clínico — ${p.apellido}, ${p.nombre}</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 30px 20px; color: #1a2535; }
+  h1 { color: #0b1f3a; font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #6b7e96; font-size: 13px; margin-bottom: 24px; }
+  .sec { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin: 18px 0 8px; padding-bottom: 6px; border-bottom: 1.5px solid #ddd; }
+  .tag { display: inline-block; background: #fff0f0; color: #8b1520; padding: 3px 10px; border-radius: 20px; font-size: 12px; margin: 2px; }
+  .med { background: #e6f4ec; border-radius: 8px; padding: 7px 12px; margin-bottom: 5px; font-size: 13px; }
+  .est { background: #e8f0fc; border-radius: 8px; padding: 7px 12px; margin-bottom: 5px; font-size: 13px; }
+  .vitals { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 12px; }
+  .vital { background: #f5f5f5; border-radius: 8px; padding: 8px; text-align: center; }
+  .vital-lbl { font-size: 10px; color: #888; text-transform: uppercase; }
+  .vital-val { font-size: 15px; font-weight: 700; }
+  .block { background: #f8f8f8; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 13px; line-height: 1.6; }
+  .footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 11px; color: #999; text-align: center; }
+  @media print { body { padding: 10px; } }
+</style>
+
+</head>
+<body>
+<h1>📋 Resumen Clínico</h1>
+<div class="sub">${p.apellido}, ${p.nombre} — Generado el ${today}</div>
+${body}
+<div class="footer">CardioRecord · Dr. Pérez · ${today}</div>
+<script>window.onload = function(){ window.print(); }<\/script>
+
+<!-- MODAL HOJA DEL DÍA -->
+
+<div class="modal-overlay hidden" id="hoja-overlay" onclick="closeHoja(event)">
+  <div class="modal-sheet" id="hoja-sheet" style="max-height:95vh">
+    <div class="modal-handle"></div>
+    <div style="background:linear-gradient(135deg,#0b1f3a,#163354);padding:16px 20px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:#fff;font-size:16px;font-weight:700">📋 Hoja del día</div>
+        <div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:2px" id="hoja-fecha"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <button onclick="shareHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">⬆️ Compartir</button>
+        <button onclick="whatsappHoja()" style="background:#25d366;border:none;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">💬 WhatsApp</button>
+        <button onclick="emailHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">✉️ Email</button>
+        <button onclick="printHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">🖨️ Imprimir</button>
+        <button onclick="closeHojaDirect()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+    </div>
+    <div style="padding:20px 18px 30px" id="hoja-body"></div>
+  </div>
+</div>
+
+</body>
+</html>`);
+  win.document.close();
+}
+
+function copyResumen() {
+const text = getResumenText();
+navigator.clipboard.writeText(text).then(() => {
+showToast(‘Resumen copiado ✓’);
+}).catch(() => {
+const ta = document.createElement(‘textarea’);
+ta.value = text;
+ta.style.position = ‘fixed’; ta.style.opacity = ‘0’;
+document.body.appendChild(ta);
+ta.focus(); ta.select();
+document.execCommand(‘copy’);
+document.body.removeChild(ta);
+showToast(‘Resumen copiado ✓’);
+});
+}
+
+// ── HOJA DEL DÍA ──────────────────────────────────────────────────────────
+function getTodayStr() {
+return new Date().toISOString().split(‘T’)[0];
+}
+
+function getHojaText() {
+const today = getTodayStr();
+const todayDisplay = new Date().toLocaleDateString(‘es-AR’, {weekday:‘long’, day:‘2-digit’, month:‘long’, year:‘numeric’});
+const consultasHoy = [];
+
+patients.forEach(p => {
+p.consultas.forEach(c => {
+if (c.fecha === today && (c.planSolicitado?.length > 0 || c.planNotas)) {
+consultasHoy.push({ paciente: p, consulta: c });
+}
+});
+});
+
+if (consultasHoy.length === 0) return null;
+
+let text = ‘’;
+text += ‘╔══════════════════════════════════════╗\n’;
+text += ‘║      SOLICITUDES DEL DÍA             ║\n’;
+text += ‘╚══════════════════════════════════════╝\n’;
+text += `Fecha: ${todayDisplay}\n`;
+text += `Dr. Pérez — Cardiología\n`;
+text += `Total de pacientes: ${consultasHoy.length}\n\n`;
+
+consultasHoy.forEach((item, i) => {
+const { paciente: p, consulta: c } = item;
+const edad = calcEdad(p.fechaNacimiento);
+text += `─────────────────────────────────────\n`;
+text += `${i+1}. ${p.apellido}, ${p.nombre}\n`;
+text += `   DNI: ${p.dni||'—'}  |  Edad: ${edad ? edad+' años' : '—'}\n`;
+text += `   Obra Social: ${p.obraSocial||'—'}${p.numAfiliado?' — Afil. N°'+p.numAfiliado:''}\n`;
+if (c.planSolicitado?.length > 0) {
+text += `\n   ESTUDIOS SOLICITADOS:\n`;
+c.planSolicitado.forEach(e => { text += `   • ${e}\n`; });
+}
+if (c.planNotas) {
+text += `\n   INDICACIONES:\n`;
+text += `   ${c.planNotas.split('\n').join('\n   ')}\n`;
+}
+text += ‘\n’;
+});
+
+text += ‘─────────────────────────────────────\n’;
+text += `CardioRecord · Dr. Pérez · ${todayDisplay}\n`;
+return text;
+}
+
+function showHojaDia() {
+const today = getTodayStr();
+const todayDisplay = new Date().toLocaleDateString(‘es-AR’, {weekday:‘long’, day:‘2-digit’, month:‘long’, year:‘numeric’});
+document.getElementById(‘hoja-fecha’).textContent = todayDisplay;
+
+const consultasHoy = [];
+patients.forEach(p => {
+p.consultas.forEach(c => {
+if (c.fecha === today) {
+consultasHoy.push({ paciente: p, consulta: c });
+}
+});
+});
+
+let html = ‘’;
+
+if (consultasHoy.length === 0) {
+html = `<div style="text-align:center;padding:40px 20px;color:#6b7e96"> <div style="font-size:48px;margin-bottom:12px">📋</div> <div style="font-size:15px">Sin consultas registradas hoy</div> <div style="font-size:13px;margin-top:6px;color:#aaa">Las consultas del día de hoy aparecerán aquí</div> </div>`;
+} else {
+// Summary counter
+const totalEstudios = consultasHoy.reduce((acc, {consulta:c}) => acc + (c.planSolicitado?.length||0), 0);
+html += `<div style="background:#f0f4f8;border-radius:12px;padding:12px 16px;margin-bottom:18px;display:grid;grid-template-columns:1fr 1fr;gap:10px"> <div style="text-align:center"> <div style="font-size:28px;font-weight:700;color:#0b1f3a">${consultasHoy.length}</div> <div style="font-size:11px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">Pacientes</div> </div> <div style="text-align:center"> <div style="font-size:28px;font-weight:700;color:#b01c2e">${totalEstudios}</div> <div style="font-size:11px;color:#6b7e96;text-transform:uppercase;letter-spacing:1px">Estudios solicitados</div> </div> </div>`;
+
+```
+consultasHoy.forEach(({paciente: p, consulta: c}, i) => {
+  const edad = calcEdad(p.fechaNacimiento);
+  const tienePlan = (c.planSolicitado?.length > 0) || c.planNotas;
+
+  html += `<div style="background:#fff;border-radius:14px;border:1.5px solid #d0d8e4;overflow:hidden;margin-bottom:14px;box-shadow:0 1px 6px rgba(11,31,58,.06)">
+    <!-- Header paciente -->
+    <div style="background:linear-gradient(135deg,#0b1f3a,#163354);padding:12px 16px;display:flex;align-items:center;gap:12px">
+      <div style="width:36px;height:36px;border-radius:18px;background:linear-gradient(135deg,#b01c2e,#d4273c);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${escH(p.apellido.charAt(0))}</div>
+      <div style="flex:1">
+        <div style="color:#fff;font-size:14px;font-weight:700">${escH(p.apellido)}, ${escH(p.nombre)}</div>
+        <div style="color:rgba(255,255,255,.6);font-size:11px">DNI ${escH(p.dni||'—')} · ${edad ? edad+' años' : '—'} · ${escH(p.obraSocial||'—')}</div>
+      </div>
+      <div style="color:rgba(255,255,255,.5);font-size:11px">#${i+1}</div>
+    </div>
+
+    <div style="padding:14px 16px">
+      ${p.numAfiliado ? `<div style="font-size:12px;color:#6b7e96;margin-bottom:10px">N° Afiliado: <strong style="color:#1a2535">${escH(p.numAfiliado)}</strong></div>` : ''}
+
+      ${c.motivoConsulta ? `<div style="font-size:13px;color:#1a2535;margin-bottom:10px"><strong>Motivo:</strong> ${escH(c.motivoConsulta)}</div>` : ''}
+
+      ${c.planSolicitado?.length > 0 ? `
+      <div style="margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:#1a4fa0;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px">📋 Estudios solicitados</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${c.planSolicitado.map(e => `<span style="background:#e8f0fc;color:#1a4fa0;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500">${escH(e)}</span>`).join('')}
+        </div>
+      </div>` : ''}
+
+      ${c.planNotas ? `
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#1a5c3a;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px">💊 Indicaciones</div>
+        <div style="background:#e6f4ec;border-radius:10px;padding:10px 13px;font-size:13px;color:#1a2535;line-height:1.6;white-space:pre-wrap">${escH(c.planNotas)}</div>
+      </div>` : ''}
+
+      ${!tienePlan ? `<div style="color:#aaa;font-size:13px;font-style:italic">Sin estudios ni indicaciones registradas</div>` : ''}
+    </div>
+  </div>`;
+});
+```
+
+}
+
+document.getElementById(‘hoja-body’).innerHTML = html;
+document.getElementById(‘hoja-overlay’).classList.remove(‘hidden’);
+document.body.style.overflow = ‘hidden’;
+}
+
+function closeHoja(e) {
+if (e.target === document.getElementById(‘hoja-overlay’)) closeHojaDirect();
+}
+function closeHojaDirect() {
+document.getElementById(‘hoja-overlay’).classList.add(‘hidden’);
+document.body.style.overflow = ‘’;
+}
+
+async function shareHoja() {
+const text = getHojaText();
+if (!text) return showToast(‘Sin consultas hoy’, true);
+if (navigator.share) {
+try {
+await navigator.share({ title: ‘Solicitudes del día — Dr. Pérez’, text });
+} catch(e) { if (e.name !== ‘AbortError’) copyHoja(); }
+} else { copyHoja(); }
+}
+
+function copyHoja() {
+const text = getHojaText();
+if (!text) return showToast(‘Sin consultas hoy’, true);
+navigator.clipboard.writeText(text).then(() => {
+showToast(‘Hoja del día copiada ✓’);
+}).catch(() => {
+const ta = document.createElement(‘textarea’);
+ta.value = text; ta.style.position=‘fixed’; ta.style.opacity=‘0’;
+document.body.appendChild(ta); ta.focus(); ta.select();
+document.execCommand(‘copy’); document.body.removeChild(ta);
+showToast(‘Hoja del día copiada ✓’);
+});
+}
+
+function whatsappHoja() {
+const text = getHojaText();
+if (!text) return showToast(‘Sin consultas hoy’, true);
+window.open(‘https://wa.me/?text=’ + encodeURIComponent(text), ‘_blank’);
+}
+
+function emailHoja() {
+const today = new Date().toLocaleDateString(‘es-AR’, {day:‘2-digit’,month:‘2-digit’,year:‘numeric’});
+const text = getHojaText();
+if (!text) return showToast(‘Sin consultas hoy’, true);
+const subject = encodeURIComponent(’Solicitudes del día — ’ + today);
+window.open(‘mailto:?subject=’ + subject + ‘&body=’ + encodeURIComponent(text), ‘_blank’);
+}
+
+function printHoja() {
+const today = new Date().toLocaleDateString(‘es-AR’, {weekday:‘long’,day:‘2-digit’,month:‘long’,year:‘numeric’});
+const body = document.getElementById(‘hoja-body’).innerHTML;
+const win = window.open(’’, ‘_blank’);
+win.document.write(`<!DOCTYPE html>
+
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<title>Solicitudes del día — Dr. Pérez</title>
+<style>
+  body { font-family:-apple-system,Arial,sans-serif; max-width:700px; margin:0 auto; padding:30px 20px; color:#1a2535; }
+  h1 { color:#0b1f3a; font-size:20px; margin-bottom:4px; }
+  .sub { color:#6b7e96; font-size:13px; margin-bottom:24px; }
+  .paciente { border:1.5px solid #ddd; border-radius:10px; margin-bottom:16px; overflow:hidden; page-break-inside:avoid; }
+  .pac-header { background:#0b1f3a; color:#fff; padding:10px 14px; }
+  .pac-nombre { font-size:14px; font-weight:700; }
+  .pac-sub { font-size:11px; opacity:.7; margin-top:2px; }
+  .pac-body { padding:12px 14px; }
+  .estudios-lbl { font-size:11px; font-weight:700; color:#1a4fa0; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .estudio { display:inline-block; background:#e8f0fc; color:#1a4fa0; padding:4px 10px; border-radius:20px; font-size:12px; margin:2px; }
+  .ind-lbl { font-size:11px; font-weight:700; color:#1a5c3a; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px; }
+  .ind-box { background:#e6f4ec; border-radius:8px; padding:8px 12px; font-size:12px; line-height:1.6; white-space:pre-wrap; }
+  .footer { margin-top:24px; padding-top:12px; border-top:1px solid #ddd; font-size:11px; color:#999; text-align:center; }
+  @media print { body { padding:10px; } }
+</style>
+</head>
+<body>
+<h1>📋 Solicitudes del día</h1>
+<div class="sub">Dr. Pérez — Cardiología — ${today}</div>
+${body}
+<div class="footer">CardioRecord · Dr. Pérez · ${today}</div>
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`);
+  win.document.close();
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
 // Load from cloud on start
 (async () => {
-  showToast('Sincronizando...');
-  await loadPatients();
-  renderList();
+showToast(‘Sincronizando…’);
+await loadPatients();
+renderList();
 })();
 </script>
 
@@ -1721,11 +2030,39 @@ function copyResumen() {
         <div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:2px" id="resumen-paciente-name"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button onclick="copyResumen()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer">📋 Copiar</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <button onclick="shareResumen()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">⬆️ Compartir</button>
+        <button onclick="shareWhatsApp()" style="background:#25d366;border:none;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">💬 WhatsApp</button>
+        <button onclick="shareEmail()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">✉️ Email</button>
+        <button onclick="printResumen()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">🖨️ Imprimir</button>
+        <button onclick="copyResumen()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">📋 Copiar</button>
+      </div>
         <button onclick="closeResumenDirect()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
       </div>
     </div>
     <div style="padding:20px 18px 30px" id="resumen-body"></div>
+  </div>
+</div>
+
+<!-- MODAL HOJA DEL DÍA -->
+
+<div class="modal-overlay hidden" id="hoja-overlay" onclick="closeHoja(event)">
+  <div class="modal-sheet" id="hoja-sheet" style="max-height:95vh">
+    <div class="modal-handle"></div>
+    <div style="background:linear-gradient(135deg,#0b1f3a,#163354);padding:16px 20px 18px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:#fff;font-size:16px;font-weight:700">📋 Hoja del día</div>
+        <div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:2px" id="hoja-fecha"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <button onclick="shareHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">⬆️ Compartir</button>
+        <button onclick="whatsappHoja()" style="background:#25d366;border:none;color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">💬 WhatsApp</button>
+        <button onclick="emailHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">✉️ Email</button>
+        <button onclick="printHoja()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer">🖨️ Imprimir</button>
+        <button onclick="closeHojaDirect()" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">×</button>
+      </div>
+    </div>
+    <div style="padding:20px 18px 30px" id="hoja-body"></div>
   </div>
 </div>
 
